@@ -1,0 +1,300 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" />
+    <style>
+        .content-section { margin-bottom: 2rem; padding: 1rem; border: 1px solid #ddd; border-radius: 5px; }
+        .image-preview { max-width: 200px; max-height: 200px; object-fit: cover; }
+        .upload-area { border: 2px dashed #ccc; padding: 20px; text-align: center; margin-bottom: 20px; cursor: pointer; }
+        .upload-area:hover { border-color: #999; }
+        .toast { position: fixed; top: 20px; right: 20px; padding: 15px; color: white; border-radius: 5px; z-index: 1000; }
+        .toast.error { background-color: #dc3545; }
+        .toast.success { background-color: #28a745; }
+        .btn-group-xs > .btn, .btn-xs { padding: .25rem .4rem; font-size: .875rem; line-height: .5; border-radius: .2rem; }
+    </style>
+</head>
+<body>
+    <button class="btn btn-outline-danger" onclick="logout()">Logout</button>
+    <div class="container mt-4">
+        <div class="d-flex justify-content-between align-items-center mb-4">
+            <h1 class="mb-0">Content Management</h1>
+            <a href="index.html" class="btn btn-outline-primary"><i class="bi bi-house-door"></i> Back to Main Site</a>
+        </div>
+        
+        <div class="content-section">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h2>Artists</h2>
+                <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#artistModal">
+                    <i class="bi bi-plus"></i> Add New Artist
+                </button>
+            </div>
+            <div class="mb-3 d-flex justify-content-between">
+                <div class="w-50">
+                    <label class="form-label">Filter by Category:</label>
+                    <select id="categoryFilter" class="form-select" onchange="loadArtists()">
+                        <option value="all">All</option>
+                        <option value="concert">Concerts</option>
+                        <option value="orchestra">Orchestras</option>
+                    </select>
+                </div>
+                <button class="btn btn-secondary align-self-end" onclick="loadArtists()">
+                    <i class="bi bi-arrow-clockwise"></i> Refresh
+                </button>
+            </div>
+            <div id="artistsList" class="row"></div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="artistModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="artistModalTitle">Add New Artist</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <form id="artistForm">
+                        <input type="hidden" id="artistId" />
+                        <div class="mb-3">
+                            <label for="artistName" class="form-label">Artist Name</label>
+                            <input type="text" class="form-control" id="artistName" required />
+                        </div>
+                        <div class="mb-3">
+                            <label for="artistCategory" class="form-label">Category</label>
+                            <select class="form-select" id="artistCategory" required>
+                                <option value="concert">Concert</option>
+                                <option value="orchestra">Orchestra</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label for="artistDescription" class="form-label">Description</label>
+                            <textarea class="form-control" id="artistDescription" rows="3"></textarea>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label">Artist Image</label>
+                            <div class="upload-area" onclick="document.getElementById('artistImageInput').click()">
+                                <p>Click to upload image or drag and drop</p>
+                                <img id="artistImagePreview" class="image-preview" style="display: none;" />
+                                <input type="file" id="artistImageInput" accept="image/*" style="display: none;" />
+                            </div>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancel</button>
+                    <button type="button" class="btn btn-primary" id="saveArtistBtn">Save Artist</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <script>
+        const API_BASE = 'http://localhost:3000/api/v1';
+        const DEFAULT_IMAGE = 'data:image/svg+xml;charset=UTF-8,%3Csvg xmlns="http://www.w3.org/2000/svg" width="300" height="200" fill="%23dee2e6"%3E%3Crect width="300" height="200"%3E%3C/text%3E%3C/svg%3E';
+
+        const showToast = (message, type = 'error') => {
+            const toast = document.createElement('div');
+            toast.className = `toast ${type}`;
+            toast.textContent = message;
+            document.body.appendChild(toast);
+            setTimeout(() => toast.remove(), 3000);
+        };
+
+        const previewImage = (input, previewId) => {
+            const file = input.files[0];
+            if (!file?.type.match('image.*')) return showToast('Please select an image file');
+            const reader = new FileReader();
+            reader.onload = e => {
+                const preview = document.getElementById(previewId);
+                preview.src = e.target.result;
+                preview.style.display = 'block';
+            };
+            reader.readAsDataURL(file);
+        };
+
+        const apiRequest = async (endpoint, method = 'GET', body = null) => {
+            try {
+                const options = { method };
+                if (body) {
+                    options.body = body instanceof FormData ? body : JSON.stringify(body);
+                    if (!(body instanceof FormData)) {
+                        options.headers = { 'Content-Type': 'application/json' };
+                    }
+                }
+                const response = await fetch(`${API_BASE}${endpoint}`, options);
+                if (!response.ok) throw new Error(await response.text() || 'Request failed');
+                return await response.json();
+            } catch (error) {
+                console.error(`API Error (${endpoint}):`, error);
+                throw error;
+            }
+        };
+
+        const loadData = async (endpoint, containerId, template) => {
+            try {
+                document.getElementById(containerId).innerHTML = `
+                    <div class="col-12 text-center">
+                        <div class="spinner-border text-primary" role="status">
+                            <span class="visually-hidden">Loading...</span>
+                        </div>
+                    </div>`;
+                const data = await apiRequest(endpoint);
+                document.getElementById(containerId).innerHTML = data.length 
+                    ? data.map(template).join('') 
+                    : `<div class="col-12 text-center text-muted">No items found</div>`;
+            } catch (error) {
+                showToast(`Failed to load ${containerId}`);
+                document.getElementById(containerId).innerHTML = `
+                    <div class="col-12 text-center text-danger">
+                        Error loading data. Please try again.
+                    </div>`;
+            }
+        };
+
+        const loadArtists = () => loadData(
+            `/artists${document.getElementById('categoryFilter').value !== 'all' 
+                ? '?category=' + document.getElementById('categoryFilter').value 
+                : ''}`,
+            'artistsList',
+            artist => {
+                const imageUrl = artist.image_url || DEFAULT_IMAGE;
+                return `
+                    <div class="col-md-4 mb-3">
+                        <div class="card h-100">
+                            <img src="${imageUrl}" 
+                                class="card-img-top image-preview"
+                                onerror="this.src='${DEFAULT_IMAGE}'">
+                            <div class="card-body">
+                                <h5 class="card-title">${artist.name}</h5>
+                                <p class="card-text">${artist.description || 'No description'}</p>
+                                <div class="btn-group btn-group-sm">
+                                    <button class="btn btn-outline-primary" onclick="editArtist(${artist.id})">
+                                    <i class="bi bi-pencil"></i> Edit
+                                    </button>
+                                    <button class="btn btn-outline-danger" onclick="deleteItem('artist', ${artist.id}, loadArtists)">
+                                        <i class="bi bi-trash"></i> Delete
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>`;
+            }
+        );
+
+        const saveItem = async (type, formId, previewId, loadFn) => {
+            const btn = document.getElementById('saveArtistBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Saving...';
+            try {
+                const formData = new FormData();
+                formData.append('name', document.getElementById('artistName').value);
+                formData.append('category', document.getElementById('artistCategory').value);
+                formData.append('description', document.getElementById('artistDescription').value);
+                const fileInput = document.getElementById('artistImageInput');
+                if (fileInput.files[0]) {
+                    formData.append('image', fileInput.files[0]);
+                } else {
+                    throw new Error('Please select an image file');
+                }
+                const id = document.getElementById('artistId').value;
+                const endpoint = id ? `/artists/${id}` : '/artists';
+                const method = id ? 'PUT' : 'POST';
+                const response = await fetch(`${API_BASE}${endpoint}`, {
+                    method,
+                    body: formData,
+                    credentials: 'include',
+                });
+                if (!response.ok) {
+                    const errorText = await response.text();
+                    throw new Error(errorText || 'Failed to save artist');
+                }
+                const result = await response.json();
+                showToast('Artist saved successfully!', 'success');
+                loadArtists();
+                document.getElementById(formId).reset();
+                document.getElementById(previewId).style.display = 'none';
+                bootstrap.Modal.getInstance(document.getElementById('artistModal')).hide();
+            } catch (error) {
+                console.error('Save error details:', {
+                    message: error.message,
+                    stack: error.stack
+                });
+                showToast(error.message || 'Failed to save artist');
+            } finally {
+                btn.disabled = false;
+                btn.innerHTML = 'Save Artist';
+            }
+        };
+
+        const deleteItem = async (type, id, loadFn) => {
+            if (!confirm(`Are you sure you want to delete this artist?`)) return;
+            try {
+                const response = await apiRequest(`/artists/${id}`, 'DELETE');
+                if (response.success) {
+                    showToast(response.message || 'Artist deleted!', 'success');
+                    loadFn();
+                } else {
+                    throw new Error(response.error || 'Delete failed');
+                }
+            } catch (error) {
+                showToast(error.message || 'Failed to delete artist');
+                console.error('Delete error:', error);
+            }
+        };
+
+        const editArtist = async (id) => {
+            try {
+                const data = await apiRequest(`/artists/${id}`);
+                const modal = new bootstrap.Modal(document.getElementById('artistModal'));
+                document.getElementById('artistId').value = id;
+                document.getElementById('artistName').value = data.name;
+                document.getElementById('artistCategory').value = data.category;
+                document.getElementById('artistDescription').value = data.description || '';
+                document.getElementById('artistModalTitle').textContent = 'Edit Artist';
+                const preview = document.getElementById('artistImagePreview');
+                if (data.image_url) {
+                    preview.src = `http://localhost:3000${data.image_url}`;
+                    preview.style.display = 'block';
+                }
+                modal.show();
+            } catch (error) {
+                showToast(`Failed to edit artist`);
+            }
+        };
+
+        document.addEventListener('DOMContentLoaded', () => {
+            document.getElementById('artistImageInput').addEventListener('change', () => 
+                previewImage(document.getElementById('artistImageInput'), 'artistImagePreview'));
+            document.querySelectorAll('.upload-area').forEach(area => {
+                area.addEventListener('dragover', e => e.preventDefault());
+                area.addEventListener('dragleave', () => area.style.borderColor = '#ccc');
+                area.addEventListener('drop', e => {
+                    e.preventDefault();
+                    area.style.borderColor = '#ccc';
+                    const input = area.querySelector('input[type="file"]');
+                    if (e.dataTransfer.files.length) {
+                        input.files = e.dataTransfer.files;
+                        const previewId = input.id.replace('Input', 'Preview');
+                        previewImage(input, previewId);
+                    }
+                });
+            });
+            document.getElementById('saveArtistBtn').addEventListener('click', () => 
+                saveItem('artist', 'artistForm', 'artistImagePreview', loadArtists));
+            window.editArtist = id => editArtist(id);
+            loadArtists();
+        });
+
+        function logout() {
+            localStorage.removeItem("isAdmin");
+            window.location.href = "login.html";
+        }
+    </script>
+</body>
+</html>

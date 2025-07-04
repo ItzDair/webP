@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Main Page</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="./styles/style1.css" />
+    <link rel="stylesheet" href="./styles/modal.css" />
+</head>
+<body>
+    <div class="toolbar">
+        <div class="left-buttons">
+            <a href="index.html"><button>Home</button></a>
+        </div>
+        <div class="right-buttons">
+            <a href="about.html"><button>About</button></a>
+            <a href="contact.html"><button>Contact</button></a>
+            <div class="user-icon-wrapper">
+                <a href="login.html">
+                    <div class="user-icon">
+                        <img id="user-avatar" src="./ims/user-alt-1-svgrepo-com.svg" alt="User Avatar" />
+                    </div>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="hero-section">
+        <div class="image-box">
+            <div class="slider">
+                <div class="image-container"></div>
+                <div class="navigation-arrows">
+                    <span class="left-arrow">&lt;</span>
+                    <span class="right-arrow">&gt;</span>
+                </div>
+                <div class="slider-nav"></div>
+            </div>
+            <div class="slogan">
+                <h1>Unleash the Night with Live Music</h1>
+                <p>Join us for unforgettable events across the globe!</p>
+            </div>
+        </div>
+    </div>
+
+    <div class="horizontal-box">
+        <h2>Best of all time orchestras</h2>
+        <div class="image-grid loading"></div>
+    </div>
+
+    <div class="second__horizontal-box">
+        <h2>Best Concerts</h2>
+        <div class="second__image-grid loading"></div>
+    </div>
+
+    <footer>
+        <div class="footer-content">
+            <p>&copy; 2025 Eventus. All rights reserved.</p>
+            <p>Built with love and music.</p>
+            <div class="footer-links">
+                <a href="about.html">About Us</a> | 
+                <a href="contact.html">Contact</a> |
+                <a href="privacy.html">Privacy Policy</a> |
+                <a href="terms.html">Terms of Service</a>
+            </div>
+        </div>
+    </footer>
+
+    <div id="eventModal" class="modal">
+        <div class="modal__card">
+            <img id="modalEventImage" src="" alt="Event Image" />
+            <h2 id="modalEventTitle"></h2>
+            <div class="modal__event-info">
+                <p id="modalEventDate"></p>
+                <p id="modalEventLocation"></p>
+                <p id="modalEventDescription"></p>
+                <a id="modalEventLink" href="#" class="modal__event-site" target="_blank">Event Website</a>
+            </div>
+            <div class="modal__buttons">
+                <button class="modal__button modal__button-close">Close</button>
+                <button class="modal__button modal__button-primary">Book Tickets</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:3000/api/v1';
+        
+        const heroImages = [
+            {
+                image_url: "./ims/main2.jpg",
+                title: "Concert Night",
+                description: "Live music experience"
+            },
+            {
+                image_url: "./ims/main4.jpg",
+                title: "Orchestra Performance",
+                description: "Classical music evening"
+            },
+            {
+                image_url: "./ims/main5.jpg",
+                title: "Festival",
+                description: "Annual music festival"
+            }
+        ];
+
+        function initializeHeroSlider() {
+            const imageContainer = document.querySelector('.image-container');
+            const sliderNav = document.querySelector('.slider-nav');
+            imageContainer.classList.remove('loading');
+            heroImages.forEach((image, index) => {
+                const imgElement = document.createElement('img');
+                imgElement.src = image.image_url;
+                imgElement.alt = image.title || 'Event image';
+                imgElement.style.display = index === 0 ? 'block' : 'none';
+                imageContainer.appendChild(imgElement);
+                const dot = document.createElement('span');
+                dot.classList.add('slider-dot');
+                dot.dataset.index = index;
+                if (index === 0) dot.classList.add('active');
+                sliderNav.appendChild(dot);
+            });
+            setupSliderNavigation();
+        }
+
+        function setupSliderNavigation() {
+            const images = document.querySelectorAll('.image-container img');
+            const dots = document.querySelectorAll('.slider-dot');
+            const leftArrow = document.querySelector('.left-arrow');
+            const rightArrow = document.querySelector('.right-arrow');
+            let currentIndex = 0;
+            function showImage(index) {
+                images.forEach(img => img.style.display = 'none');
+                dots.forEach(dot => dot.classList.remove('active'));
+                images[index].style.display = 'block';
+                dots[index].classList.add('active');
+                currentIndex = index;
+            }
+            if (rightArrow) {
+                rightArrow.addEventListener('click', () => {
+                    const newIndex = (currentIndex + 1) % images.length;
+                    showImage(newIndex);
+                });
+            }
+            if (leftArrow) {
+                leftArrow.addEventListener('click', () => {
+                    const newIndex = (currentIndex - 1 + images.length) % images.length;
+                    showImage(newIndex);
+                });
+            }
+            dots.forEach((dot, index) => {
+                dot.addEventListener('click', () => {
+                    showImage(index);
+                });
+            });
+            setInterval(() => {
+                const newIndex = (currentIndex + 1) % images.length;
+                showImage(newIndex);
+            }, 5000);
+        }
+
+        document.addEventListener('DOMContentLoaded', async () => {
+            try {
+                initializeHeroSlider();
+                const artistsResponse = await fetch(`${API_BASE}/artists`);
+                if (!artistsResponse.ok) throw new Error('Failed to load artists');
+                const artists = await artistsResponse.json();
+                const concertsContainer = document.querySelector('.image-grid');
+                const orchestrasContainer = document.querySelector('.second__image-grid');
+                concertsContainer.classList.remove('loading');
+                orchestrasContainer.classList.remove('loading');
+                concertsContainer.innerHTML = '';
+                orchestrasContainer.innerHTML = '';
+                artists.forEach(artist => {
+                    const artistImgUrl = artist.image_url 
+                        ? `http://localhost:3000${artist.image_url}`
+                        : 'http://localhost:3000/images/default-artist.jpg';
+                    const itemHtml = `
+                        <div class="${artist.category === 'concert' ? 'image-item' : 'second__image-item'}" data-artist-id="${artist.id}">
+                            <a href="event.html?artist=${encodeURIComponent(artist.name)}">
+                                <img src="${artist.image_url || './images/default-artist.jpg'}" 
+                                alt="${artist.name}" 
+                                loading="lazy"
+                                onerror="this.src='./images/default-artist.jpg';this.onerror=null;">
+                                <p class="${artist.category === 'concert' ? 'image-title' : 'second__image-title'}">${artist.name}</p>
+                            </a>
+                        </div>
+                    `;
+                    if (artist.category === 'concert') {
+                        concertsContainer.innerHTML += itemHtml;
+                    } else {
+                        orchestrasContainer.innerHTML += itemHtml;
+                    }
+                });
+                const modal = document.getElementById('eventModal');
+                const modalCloseBtn = document.querySelector('.modal__button-close');
+                async function openModal(artistId) {
+                    try {
+                        document.getElementById('modalEventTitle').textContent = 'Loading...';
+                        document.body.classList.add('stop-scrolling');
+                        modal.classList.add('modal--show');
+                        const response = await fetch(`${API_BASE}/artists/${artistId}`);
+                        if (!response.ok) throw new Error('Failed to load artist details');
+                        const artistData = await response.json();
+                        console.log('Artist Data:', artistData);
+                        document.getElementById('modalEventTitle').textContent = artistData.name;
+                        document.getElementById('modalEventImage').src = artistData.image_url;
+                        document.getElementById('modalEventDate').textContent = `Date: ${artistData.date || 'TBD'}`;
+                        document.getElementById('modalEventLocation').textContent = `Location: ${artistData.location || 'Various locations'}`;
+                        const desc = artistData.description && artistData.description.trim() !== '' 
+                            ? artistData.description 
+                            : 'No description available';
+                        document.getElementById('modalEventDescription').textContent = desc;
+                        document.getElementById('modalEventLink').href = artistData.website || '#';
+                    } catch (error) {
+                        console.error('Error loading artist details:', error);
+                        document.getElementById('modalEventTitle').textContent = 'Error loading details';
+                    }
+                }
+                function closeModal() {
+                    document.body.classList.remove('stop-scrolling');
+                    modal.classList.remove('modal--show');
+                }
+                modalCloseBtn.addEventListener('click', closeModal);
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) closeModal();
+                });
+                document.addEventListener('click', (e) => {
+                    const artistItem = e.target.closest('.image-item, .second__image-item');
+                    if (artistItem) {
+                        e.preventDefault();
+                        const artistId = artistItem.dataset.artistId;
+                        openModal(artistId);
+                    }
+                });
+            } catch (error) {
+                console.error('Error loading artists:', error);
+                document.querySelectorAll('.loading').forEach(el => {
+                    el.classList.remove('loading');
+                    el.innerHTML = `<div class="error-message">Failed to load artists: ${error.message}</div>`;
+                });
+            }
+        });
+    </script>
+</body>
+</html>
